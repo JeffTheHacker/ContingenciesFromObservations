@@ -17,9 +17,8 @@ parser.add_argument('-r', '--replan', action='store', type=int, dest='replan', h
 parser.add_argument('-t', '--planner_type', action='store', type=int, dest='planner_type', help='Sets the type of planner. 0: contingent, 1: overconfident, 2: underconfident.')
 parser.add_argument('-s', '--scenario', action='store', type=int, dest='scenario', help='Sets the scenario. 0: left turn, 1: overtake, 2: right turn')
 parser.add_argument('-l', '--location', action='store', type=int, dest='location', help='Sets location of the scenario, an integer from 0 to 3.')
-
-parser.add_argument('--video_name', type=str, dest='video_name', default='video')
-parser.add_argument('--max_episodes', type=int, dest='max_episodes', default=None)
+parser.add_argument('--video_name', type=str, dest='video_name', default='video', help='Video name if recording')
+parser.add_argument('--max_episodes', type=int, dest='max_episodes', default=None, help='Max number of episodes to run before terminating')
 
 args = parser.parse_args()
 
