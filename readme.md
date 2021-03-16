@@ -38,6 +38,12 @@ pip install -r requirements.txt
 ```
 Note that `CARLAROOT` needs to be set and `source precog_env.sh` needs to be run every time you activate the conda env in a new window/shell.
 
+Before running any of the experiments, you need to launch the CARLA server:
+```bash
+cd $CARLAROOT
+./CarlaUE4.sh
+```
+
 ## Running experiments with Precog model
 
 ```bash
@@ -53,6 +59,8 @@ python scenario_runner.py \
 --scenario 0 \
 --location 0
 ```
+
+The example script [test.sh](Experiment/test.sh) will run the experiments from the paper and generate a video for each one. On a machine with a Titan RTX GPU and Intel i10900k CPU, each episode takes approximately 10 minutes to run, and the entire script takes several hours to run to completion.
 
 ## Collecting data
 
