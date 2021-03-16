@@ -17,6 +17,10 @@ parser.add_argument('-r', '--replan', action='store', type=int, dest='replan', h
 parser.add_argument('-t', '--planner_type', action='store', type=int, dest='planner_type', help='Sets the type of planner. 0: contingent, 1: overconfident, 2: underconfident.')
 parser.add_argument('-s', '--scenario', action='store', type=int, dest='scenario', help='Sets the scenario. 0: left turn, 1: overtake, 2: right turn')
 parser.add_argument('-l', '--location', action='store', type=int, dest='location', help='Sets location of the scenario, an integer from 0 to 3.')
+
+parser.add_argument('--video_name', type=str, dest='video_name', default='video')
+parser.add_argument('--max_episodes', type=int, dest='max_episodes', default=None)
+
 args = parser.parse_args()
 
 # configurations
@@ -99,6 +103,10 @@ class ScenarioRunner(object):
 
         # run this indefinitely
         while True:
+
+            if args.max_episodes and self.episode_num >= args.max_episodes:
+                print("Reached max episodes, exiting..")
+                raise KeyboardInterrupt
 
             if (PLANNER_TYPE == 2 and self.episode_num < 5):
                 self.check_episode_end()
@@ -605,14 +613,21 @@ class ScenarioRunner(object):
 
 def main():
     runner = ScenarioRunner()
+
+    if RECORDING:
+        image_folder = 'Visualize/camera_folder'
+        images = [img for img in sorted(os.listdir(image_folder)) if img.endswith(".jpg")]
+        # Wipe previous images
+        for im in images:
+            os.remove(os.path.join(image_folder,im))
+
     try:
         runner.start()
     finally:
 
         def exit_handler():
             if RECORDING:
-                image_folder = 'Visualize/camera_folder'
-                video_name = 'Visualize/video.avi'
+                video_name = 'Visualize/{}.avi'.format(args.video_name)
                 images = [img for img in sorted(os.listdir(image_folder)) if img.endswith(".jpg")]
                 frame = cv2.imread(os.path.join(image_folder, images[0]))
                 height, width, layers = frame.shape
