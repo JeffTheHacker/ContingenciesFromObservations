@@ -21,7 +21,7 @@ Once downloaded, make sure that `CARLAROOT` is set to point to your copy of CARL
 export CARLAROOT=/path/to/your/carla/install
 ```
 
-CARLAROOT should point to the base directory, such that the output of `ls $CARLAROOT` shows the following files:
+`CARLAROOT` should point to the base directory, such that the output of `ls $CARLAROOT` shows the following files:
 ```bash
 CarlaUE4     CHANGELOG   Engine  Import           LICENSE                        PythonAPI  Tools
 CarlaUE4.sh  Dockerfile  HDMaps  ImportAssets.sh  Manifest_DebugFiles_Linux.txt  README     VERSION
