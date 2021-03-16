@@ -121,6 +121,51 @@ optimizer.params.plot_before_train=True \
 optimizer.params.save_before_train=True
 ```
 
+## Running the MFP baseline
+
+Install the [MFP baseline repo](https://github.com/cpacker/ml-multiple-futures-prediction), and set `MFPROOT` to point to your copyJ:
+```bash
+export MFPROOT=/your/copy/of/mfp
+```
+
+Use the `scenario_runner_mfp.py` script to run the MFP model inside of the CARLA scenarios:
+```bash
+# left turn
+python scenario_runner_mfp.py \
+--enable-inference \
+--enable-control \
+--enable-recording \
+--replan 4 \
+--scenario 0 \
+--location 0 \
+--mfp_control \
+--mfp_checkpoint CARLA_left_turn_scenario
+
+# right turn
+python scenario_runner_mfp.py \
+--enable-inference \
+--enable-control \
+--enable-recording \
+--replan 4 \
+--scenario 2 \
+--location 0 \
+--mfp_control \
+--mfp_planning_choice highest_score_weighted \
+--mfp_checkpoint CARLA_right_turn_scenario
+
+# overtake
+python scenario_runner_mfp.py \
+--enable-inference \
+--enable-control \
+--enable-recording \
+--replan 4 \
+--scenario 1 \
+--location 0 \
+--mfp_control \
+--mfp_planning_choice highest_score_weighted \
+--mfp_checkpoint CARLA_overtake_scenario
+```
 
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
+
