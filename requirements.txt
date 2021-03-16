@@ -6,7 +6,6 @@ backcall==0.1.0
 biwrap==0.1.6
 bleach==3.1.0
 cachetools==3.1.1
-carla==0.9.8
 certifi==2019.11.28
 chardet==3.0.4
 cloudpickle==1.1.1
