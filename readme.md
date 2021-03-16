@@ -1,6 +1,6 @@
 # Contingencies From Observations
 
-# Purposes
+## Purposes
 
 1. Serve as the accompanying code for ICRA 2021 paper: Contingencies from Observations.
 2. A framework for running scenarios with PRECOG models in CARLA.
