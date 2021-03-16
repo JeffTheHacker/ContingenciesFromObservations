@@ -5,18 +5,38 @@
 1. Serve as the accompanying code for ICRA 2021 paper: Contingencies from Observations.
 2. A framework for running scenarios with Precog models in Carla.
 
+## Installing Carla
+
+This repository requires Carla 0.9.8. Please navigate to carla.org to download the correct packages, or do the following:
+```bash
+# Downloads hosted binaries
+wget http://carla-assets-internal.s3.amazonaws.com/Releases/Linux/CARLA_0.9.8.tar.gz
+
+# Unpack CARLA 0.9.8 download
+tar -xvzf CARLA_0.9.8.tar.gz -C /path/to/your/desired/carla/install
+```
+
+Once downloaded, make sure that `CARLAROOT` is set to point to your copy of CARLA:
+```bash
+export CARLAROOT=/path/to/your/carla/install
+```
+
+CARLAROOT should point to the basae directory, such that the output of `ls $CARLAROOT` shows the following files:
+```bash
+CarlaUE4     CHANGELOG   Engine  Import           LICENSE                        PythonAPI  Tools
+CarlaUE4.sh  Dockerfile  HDMaps  ImportAssets.sh  Manifest_DebugFiles_Linux.txt  README     VERSION
+```
+
 ## Setup
 
 ```bash
 conda create -n precog python=3.6.6
 conda activate precog
-source precog_env.sh # make sure to run this every time
+# make sure to source this every time after activating, and make sure $CARLAROOT is set beforehand
+source precog_env.sh
 pip install -r requirements.txt
 ```
-
-## Installing Carla
-
-This repository requires Carla 0.9.8. Please navigate to carla.org to install carla in the same conda environment.
+Note that `CARLAROOT` needs to be set and `source precog_env.sh` needs to be run every time you activate the conda env in a new window/shell.
 
 ## Running experiments with Precog model
 
