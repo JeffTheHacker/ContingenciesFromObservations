@@ -3,11 +3,11 @@
 # Purposes
 
 1. Serve as the accompanying code for ICRA 2021 paper: Contingencies from Observations.
-2. A framework for running scenarios with Precog models in Carla.
+2. A framework for running scenarios with PRECOG models in CARLA.
 
-## Installing Carla
+## Installing CARLA
 
-This repository requires Carla 0.9.8. Please navigate to carla.org to download the correct packages, or do the following:
+This repository requires CARLA 0.9.8. Please navigate to carla.org to download the correct packages, or do the following:
 ```bash
 # Downloads hosted binaries
 wget http://carla-assets-internal.s3.amazonaws.com/Releases/Linux/CARLA_0.9.8.tar.gz
@@ -44,7 +44,7 @@ cd $CARLAROOT
 ./CarlaUE4.sh
 ```
 
-## Running experiments with Precog model
+## Running experiments with PRECOG model
 
 ```bash
 cd Experiment
@@ -64,7 +64,7 @@ The example script [test.sh](Experiment/test.sh) will run the experiments from t
 
 ## Collecting data
 
-First collect data in Carla.
+First collect data in CARLA.
 
 ```bash
 cd Experiment
