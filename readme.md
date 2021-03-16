@@ -60,7 +60,7 @@ python scenario_runner.py \
 --location 0
 ```
 
-The example script [test.sh](Experiment/test.sh) will run the experiments from the paper and generate a video for each one. For reference, using a Titan RTX GPU and Intel i10900k CPU, each episode takes approximately 10 minutes to run, and the entire script takes several hours to run to completion.
+The example script [test.sh](Experiment/test.sh) will run the experiments from the paper and generate a video for each one. For reference, when using a Titan RTX GPU and Intel i9-10900k CPU each episode takes approximately 10 minutes to run, and the entire script takes several hours to run to completion.
 
 ## Collecting data
 
