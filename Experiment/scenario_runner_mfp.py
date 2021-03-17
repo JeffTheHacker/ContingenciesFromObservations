@@ -9,8 +9,8 @@ parser.add_argument('--enable-recording', dest='recording',action='store_true', 
 parser.add_argument('--enable-sampling', dest='sampling',action='store_true', help='Plot sampled trajectories at every frame.')
 parser.add_argument('--enable-evaluation', dest='evaluation',action='store_true', help='Evaluate likelihood or each expert behavior type.')
 parser.add_argument('--enable-collecting', dest='collecting',action='store_true', help='Collect data.')
-parser.add_argument('-cp', '--checkpoint_path', action='store', dest='checkpoint_path', type=str, help='Absolute path to model checkpoint, example: ...SocialConvRNN_/esp-model-100000')
-parser.add_argument('-mp', '--model_path', action='store', dest='model_path', type=str, help='Absolute path to model folder, example: ...SocialConvRNN_')
+parser.add_argument('-cp', '--checkpoint_path', action='store', dest='checkpoint_path', type=str, help='Absolute path to model checkpoint, example: ...SocialConvRNN_/esp-model-100000', default='../Model/esp_train_results/2021-01/01-24-20-31-06_Left_Turn_Dataset_precog.bijection.social_convrnn.SocialConvRNN_/esp-model-668000')
+parser.add_argument('-mp', '--model_path', action='store', dest='model_path', type=str, help='Absolute path to model folder, example: ...SocialConvRNN_', default='../Model/esp_train_results/2021-01/01-24-20-31-06_Left_Turn_Dataset_precog.bijection.social_convrnn.SocialConvRNN_')
 parser.add_argument('--enable-inference', dest='inference',action='store_true', help='Run planning and plot trajectories in Carla.')
 parser.add_argument('--enable-control', dest='control',action='store_true', help='Control the ego vehicle with planned trajectories.')
 parser.add_argument('-r', '--replan', action='store', type=int, dest='replan', help='Integer > 0. Sets replanning rate. Smaller -> more frequent replanning.')
@@ -19,6 +19,12 @@ parser.add_argument('-s', '--scenario', action='store', type=int, dest='scenario
 parser.add_argument('-l', '--location', action='store', type=int, dest='location', help='Sets location of the scenario, an integer from 0 to 3.')
 parser.add_argument('--video_name', type=str, dest='video_name', default='video', help='Video name if recording')
 parser.add_argument('--max_episodes', type=int, dest='max_episodes', default=None, help='Max number of episodes to run before terminating')
+
+# MFP args
+parser.add_argument('--mfp_control', dest='mfp_control', action='store_true', help='Whether or not to use MFP for control')
+parser.add_argument('--mfp_planning_choice', type=str, dest='mfp_planning_choice', default='highest_score_weighted', choices=['highest_score_threshold', 'highest_score_weighted', 'highest_prob'], help='Planning method for MFP')
+parser.add_argument('--mfp_checkpoint', type=str, dest='mfp_checkpoint', default=None, help='MFP checkpoint to load')
+parser.add_argument('--mfp_checkpoint_itr', type=str, dest='mfp_checkpoint_itr', default='latest', help='Specific save point to load')
 
 args = parser.parse_args()
 
@@ -49,9 +55,205 @@ if SCENARIO == 2:
     from Experiment.Right_Turn_Scenario.scenario_specifics import *
     from Experiment.Right_Turn_Scenario.goal_likelihood import *
 
+# Import packages from MFP repo
+import os
+assert 'PRECOGROOT' in os.environ, "Make sure to run `source precog_env.sh`"
+ROOT_DIR = os.environ['PRECOGROOT']
+assert 'MFPROOT' in os.environ, "Set MFPROOT to point to the MFP directory!"
+MFP_ROOT = os.environ['MFPROOT']
+MFP_CKPT = os.path.join(MFP_ROOT, 'multiple_futures_prediction/checkpts', args.mfp_checkpoint)
+MFP_CKPT_ITR = args.mfp_checkpoint_itr
+MFP_CONTROL = args.mfp_control
+MFP_PLANNING_CHOICE = args.mfp_planning_choice
+
+sys.path.append(MFP_ROOT)
+from multiple_futures_prediction.model_carla import mfpNet
+from multiple_futures_prediction.train_carla import Params
+from multiple_futures_prediction.dataset_carla import CarlaDataset
+from multiple_futures_prediction.demo_carla import load_mfp_model 
+from multiple_futures_prediction.my_utils import rotate_np 
+
+def plt_setup():
+    if SCENARIO == 0: # left turn
+        PADDING = 50
+        plt.xlim(160,230+PADDING)
+        plt.ylim(-180,-150+PADDING)
+    elif SCENARIO == 1: # overtake
+        PADDING = 10
+        plt.xlim(-90-PADDING,-85+PADDING)
+        plt.ylim(-60-PADDING,5+6*PADDING) # needs extra padding in direction both cars are moving
+    elif SCENARIO == 2: # right turn
+        PADDING = 25
+        plt.xlim(160-3*PADDING,260) # needs extra padding in direction ego's turning / actor's moving
+        plt.ylim(-210,-170+PADDING)
+
+def ax_setup(ax):
+    if SCENARIO == 0: # left turn
+        PADDING = 50
+        ax.set_xlim(160,230+PADDING)
+        ax.set_ylim(-180,-150+PADDING)
+    elif SCENARIO == 1: # overtake
+        PADDING = 10
+        ax.set_xlim(-90-PADDING,-85+PADDING)
+        ax.set_ylim(-60-PADDING,5+6*PADDING) # needs extra padding in direction both cars are moving
+    elif SCENARIO == 2: # right turn
+        PADDING = 25
+        ax.set_xlim(160-3*PADDING,260) # needs extra padding in direction ego's turning / actor's moving
+        ax.set_ylim(-210,-170+PADDING)
+
+
 class ScenarioRunner(object):
 
+    def obs_to_mfp_input(self, ego_past, actor_past, ego_yaw, actor_yaw, im_crop=None):
+        """Turn the gym observation into the input format
+        used with the (pytorch) MFP model"""
+        ego_past = np.array(ego_past)
+        actor_past = np.array(actor_past)
+        ego_fut = np.zeros((30,2))
+        actor_fut = np.zeros((30,2))
+        # NOTE: this will shift the future to start at 0, but in our case it shouldn't matter
+        #       (since we're passing 0s/dummy values in)
+        hist, fut = self.mfp_carla_dataset.process_xy_data(
+          ego_past, ego_fut, ego_yaw,
+          actor_past, actor_fut, actor_yaw)
+        # neighbors[ind] maps from
+        #     0-index'd vehicle_id
+        # to
+        #     list of (0-index'd neighbor's vehicle_id, neighbor's vehicle_id, neighbor's grid pos)
+        neighbors = {
+          0: [(1, 1, 1)],
+          1: [(0, 0, 0)],
+        }
+
+        # yaw = np.deg2rad(self.ego.get_transform().rotation.yaw + 90)
+        yaws = np.array([np.deg2rad(ego_yaw), np.deg2rad(actor_yaw)])
+
+        ### (2) Preprocess into "batch mode"
+        hist, nbrs, mask, fut, mask, context, yaws, nbrs_info = \
+          self.mfp_carla_dataset.collate_fn([(hist, fut, neighbors, im_crop, yaws)])
+        
+        ### (3) Do required preprocessing (offsetting)
+        if self.mfp_params.remove_y_mean:
+          # preprocess the (real) future traj before passing to model
+          fut = fut-y_mean.unsqueeze(1)
+
+        if self.mfp_params.use_cuda:
+          hist = hist.cuda()
+          nbrs = nbrs.cuda()
+          mask = mask.cuda()
+          fut = fut.cuda()
+          if context is not None:
+            context = context.cuda()
+          if yaws is not None:
+            yaws = yaws.cuda()
+
+        return hist, nbrs, mask, fut, mask, context, yaws, nbrs_info
+
+    def mfp_output_to_trajs(self, ref_pos, yaws, fut_preds, modes_pred):
+        """Post-process MFP outputs into easy to use trajectories"""
+        assert len(modes_pred) == 2, modes_pred
+        assert all([np.isclose(1,i.cpu().detach().numpy().sum()) for i in modes_pred]), \
+          [i.cpu().detach().numpy().sum() for i in modes_pred]
+        for i,m in enumerate(modes_pred):
+            m = m.cpu().detach().numpy()
+
+        ego_fut_probs = modes_pred[0].cpu().detach().numpy() # (2,)
+        assert np.isclose(1,ego_fut_probs.sum()), ego_fut_probs.sum()
+        actor_fut_probs = modes_pred[1].cpu().detach().numpy() # (2,)
+        assert np.isclose(1,actor_fut_probs.sum()), actor_fut_probs.sum()
+
+        # for each mode (eg, K=25), a tuple of (horizon, n_agents, mean/std/...)
+        assert all([i.shape == (30,2,5) for i in fut_preds]), fut_preds[0].shape
+
+        ego_trajs = []
+        actor_trajs = []
+        for k in range(len(fut_preds)):
+          fut_preds_mode_k = fut_preds[k].cpu().detach().numpy()[:,:,:2]
+          # preprocess - add back mean
+          if self.mfp_params.remove_y_mean:
+            fut_preds_mode_k += y_mean.unsqueeze(1).cpu().detach().numpy() # 30,2,2
+          # preprocess - add back reference position
+          # NOTE offset by final hist pos
+          fut_preds_mode_k += ref_pos.view(1,-1,2).cpu().detach().numpy() 
+
+          if self.mfp_params.rotate_pov:
+            # Need to rotate the generated futures 
+            # AND the "ground truth" futures since the
+            # histories which were fed as inputs to the model were
+            # rotated to POV view
+            ref_pos_np = ref_pos.cpu().detach().numpy()
+            fut_preds_mode_k[:,0,:] = rotate_np(
+              ref_pos_np[0,:],
+              fut_preds_mode_k[:,0,:],
+              -yaws[0],
+              degrees=False)
+            fut_preds_mode_k[:,1,:] = rotate_np(
+              ref_pos_np[1,:],
+              fut_preds_mode_k[:,1,:],
+              -yaws[1],
+              degrees=False)
+
+          ego_trajs.append( (ego_fut_probs[k], fut_preds_mode_k[:,0,:]) )
+          actor_trajs.append( (actor_fut_probs[k], fut_preds_mode_k[:,1,:]) )
+          
+        return (ego_trajs, actor_trajs)
+
+    def draw_traj(self, traj, color, point_size=0.1, line_size=0.05,
+                  life_time=8*(REPLAN/30),
+                  x_offset=0, y_offset=0, z_offset=0,
+                  text=None, text_ts=0, text_color=None):
+        life_time = 1/30
+        for i in range(traj.shape[0]): # dots
+            loc = carla.Location(traj[i][0]+x_offset, traj[i][1]+y_offset, 2+z_offset)
+            self.world.debug.draw_point(loc, point_size, 
+              color, life_time=life_time) # should only show for one frame
+        for i in range(traj.shape[0]-1): # lines
+            start = carla.Location(traj[i][0]+x_offset, traj[i][1]+y_offset, 2+z_offset)
+            end = carla.Location(traj[i+1][0]+x_offset, traj[i+1][1]+y_offset, 2+z_offset)
+            self.world.debug.draw_line(start, end, line_size,
+              color, life_time=life_time) # should only show for one frame
+        if text:
+            if not text_color:
+                text_color = color
+            self.world.debug.draw_string(
+              carla.Location(traj[text_ts][0]+x_offset,traj[text_ts][1]+y_offset,2+z_offset),
+              text, color=text_color,
+              # NOTE: for some reason, -1 is the only arg that seems to avoid
+              # duplicate text annotations in the simulator
+              life_time=-1)
+
     def start(self):
+
+        # Try to load MFP model before doing anything CARLA-related
+        print("Loading MFP model...")
+        self.mfp_net, self.mfp_params, ckpt_file = load_mfp_model(MFP_CKPT,checkpoint=MFP_CKPT_ITR)
+        print("...done")
+
+        print("Loading MFP CarlaDataset object (for preprocessing model inputs)...")
+        d_s = self.mfp_params.subsampling
+        t_h = self.mfp_params.hist_len_orig_hz
+        t_f = self.mfp_params.fut_len_orig_hz
+        self.mfp_carla_dataset = CarlaDataset(
+          os.path.join(MFP_ROOT, 'multiple_futures_prediction/carla_data_cfd/Left_Turn_Dataset/train'),
+          t_h, t_f, d_s, self.mfp_params.encoder_size, self.mfp_params.use_gru, self.mfp_params.self_norm,
+          self.mfp_params.data_aug, self.mfp_params.use_context, self.mfp_params.nbr_search_depth,
+          shuffle=False)
+        self._plan_counter = 0
+        print("...done")
+
+        self.VIS_DIR = "{}-{}".format(os.path.basename(MFP_CKPT), os.path.basename(ckpt_file))
+        if RECORDING:
+            image_folder = os.path.join(ROOT_DIR,'Experiment/Visualize/camera_folder_{}'.format(self.VIS_DIR))
+            if os.path.isdir(image_folder):
+                print("Warning: dir %s already exists!" % image_folder)
+            else:
+                # create
+                os.mkdir(image_folder)
+            images = [img for img in sorted(os.listdir(image_folder)) if img.endswith(".jpg")]
+            # Wipe previous images
+            for im in images:
+                os.remove(os.path.join(image_folder,im))
+
         # create world
         self.spawn_world('Town03')
 
@@ -176,6 +378,13 @@ class ScenarioRunner(object):
             elif PLANNER_TYPE == 2:
                 self.planner = UnderconfidentPlanner(self.inference,CostedGoalLikelihood(self.inference,self.constants),self.sess,self.all_trajectories)
 
+        # NOTE: Need a copy of the cost model to turn MFP forecasting into planning
+        self.mfp_cost_model = CostedGoalLikelihood(
+          None, self.constants, batch_dim=1, traj_dim=self.mfp_params.modes**2)
+        self.mfp_cost_model_ph = tf.placeholder(
+          'float64',shape=(1,self.mfp_params.modes**2,2,30,2)) # xy, T, agents
+        self.mfp_cost_model_op = self.mfp_cost_model.log_prob(self.mfp_cost_model_ph)
+
         # handle world creation
         if self.constants.town != self.world.get_map().name:
             self.spawn_world(self.constants.town)
@@ -295,7 +504,10 @@ class ScenarioRunner(object):
         self.collided = True
 
     def camera_callback(self,image):
-        image.save_to_disk('Visualize/camera_folder/%.6d.jpg' % image.frame)
+        image.save_to_disk(
+          os.path.join(ROOT_DIR,
+                       'Experiment/Visualize/camera_folder_{}'.format(self.VIS_DIR),
+                       '%.6d.jpg' % image.frame))
 
     def generate_sample(self):
         if len(self.past_ego_buffer) != 45:
@@ -475,6 +687,7 @@ class ScenarioRunner(object):
                 actor_past.append([self.actor.get_transform().location.x,self.actor.get_transform().location.y])
 
     def plan(self):
+        self._plan_counter += 1
 
         if len(self.past_ego_buffer) != 45:
             return
@@ -496,48 +709,246 @@ class ScenarioRunner(object):
 
         light_strings = np.tile(np.asarray("GREEN"), (10,))
 
-        minibatch = self.inference.training_input.to_feed_dict(
-            S_past_world_frame=past_batch.astype(np.float64),
-            yaws=yaws.astype(np.float64),
-            overhead_features=bev.astype(np.float64),
-            agent_presence=agent_presence.astype(np.float64),
-            S_future_world_frame=future_batch.astype(np.float64),
-            light_strings=light_strings,
-            metadata_list=interface.MetadataList(),
-            is_training=np.array(False))
+        if not MFP_CONTROL:
+            minibatch = self.inference.training_input.to_feed_dict(
+                S_past_world_frame=past_batch.astype(np.float64),
+                yaws=yaws.astype(np.float64),
+                overhead_features=bev.astype(np.float64),
+                agent_presence=agent_presence.astype(np.float64),
+                S_future_world_frame=future_batch.astype(np.float64),
+                light_strings=light_strings,
+                metadata_list=interface.MetadataList(),
+                is_training=np.array(False))
+
+
+        ### Take traj data and feed it into the MFP model
+
+        if self.mfp_params.use_context:
+            mfp_bev = transform_lidar_data(np.array(sensor_data),60,360)
+            context = mfp_bev.astype(np.float64)[np.newaxis,:,:]
+            assert context.shape == (1,60,360), context.shape
+        else:
+            context = None
+        hist, nbrs, mask, fut, mask, context, yaws, nbrs_info = \
+          self.obs_to_mfp_input(
+            ego_past, actor_past,
+            self.ego.get_transform().rotation.yaw,
+            self.actor.get_transform().rotation.yaw,
+            context)
+        bStepByStep = True
+        if self.mfp_params.no_atten_model:
+          fut_preds, modes_pred = self.mfp_net.forward_mfp(
+            hist, nbrs, mask, context,
+            nbrs_info, fut, bStepByStep,
+            yaws=yaws, rotate_hist=self.mfp_params.rotate_pov)
+        else:
+          fut_preds, modes_pred = self.mfp_net.forward_mfp(
+            hist, nbrs, mask, context,
+            nbrs_info, fut, bStepByStep)
+
+        # re-arrange into easy-to-use format
+        ref_pos = hist[-1,:,:] # final (i=0) x,y (i=2) for all vehicles (i=1)
+        ego_futures, actor_futures = self.mfp_output_to_trajs(
+          ref_pos,
+          yaws.cpu().detach().numpy(),
+          fut_preds, modes_pred)
 
         if len(self.future_plan) == 0 or not CONTROL:
-            if PLANNER_TYPE == 2:
-                decision = self.planner.plan()
-                self.ego_behavior.behavior_type = decision
-                self.handle_ego()
-                return
-            else:
-                traj,score = self.planner.plan(minibatch)
-                print("Planned trajectory:")
-                print(traj)
-
-            ego_traj = traj[0]
-            for i in range(30):
-                loc = carla.Location(ego_traj[i][0],ego_traj[i][1],2)
-                self.world.debug.draw_point(loc, 0.1, carla.Color(44,99,163,50), life_time = 8 * (REPLAN / 30)) # should only show for one frame
-            for i in range(29):
-                start = carla.Location(ego_traj[i][0],ego_traj[i][1],2)
-                end = carla.Location(ego_traj[i+1][0],ego_traj[i+1][1],2)
-                self.world.debug.draw_line(start, end, 0.05, carla.Color(44,99,163,50), life_time=8 * (REPLAN / 30)) # should only show for one frame
-
-            actor_traj = traj[1]
-            for i in range(30):
-                loc = carla.Location(actor_traj[i][0],actor_traj[i][1],2)
-                if CONTROL:
-                    self.world.debug.draw_point(loc, 0.1, carla.Color(255,60,20,50), life_time = 8 * (REPLAN / 30)) # should only show for one frame
-            for i in range(29):
-                start = carla.Location(actor_traj[i][0],actor_traj[i][1],2)
-                end = carla.Location(actor_traj[i+1][0],actor_traj[i+1][1],2)
-                self.world.debug.draw_line(start, end, 0.05, carla.Color(255,60,20,50), life_time=8 * (REPLAN / 30)) # should only show for one frame
+            if not MFP_CONTROL:
+                if PLANNER_TYPE == 2:
+                    decision = self.planner.plan()
+                    self.ego_behavior.behavior_type = decision
+                    self.handle_ego()
+                    return
+                else:
+                    traj,score = self.planner.plan(minibatch)
+                    print("Planned trajectory:")
+                    print(traj)
 
 
-            self.future_plan = traj.tolist()[0]
+            # Keep track of the highest scoring future that MFP generated
+            # We want to use that one for planning
+            max_joint_traj_score = None
+            best_plan = None
+
+            assert len(ego_futures) == len(actor_futures)
+
+            ### Find the best trajectory to use for planning with a PID waypoint controller
+
+            # Exhaustive search, K^2
+            # NOTE: this can be batched, no need for a nested loop
+            joint_traj_all = np.zeros((self.mfp_params.modes**2,2,30,2),dtype='float64')
+
+            # Do we want to ignore trajs under a certain threshold?
+            #planning_p_threshold = 0.01
+            planning_p_threshold = 0.001
+            traj_idxs_to_ignore = []
+            traj_weights = []
+
+            traj_idx = 0
+            for (ego_prob, ego_traj) in ego_futures:
+              ego_traj = ego_traj.astype('float64')  
+              for (actor_prob, actor_traj) in actor_futures:
+                actor_traj = actor_traj.astype('float64')
+                # Fill the batched array to send to tf
+                joint_traj_all[traj_idx,0,:,:] = ego_traj
+                joint_traj_all[traj_idx,1,:,:] = actor_traj
+                # Don't consider low prob trajectories
+                if MFP_PLANNING_CHOICE == 'highest_score_threshold':
+                  if (ego_prob < planning_p_threshold) or (actor_prob < planning_p_threshold):
+                    traj_idxs_to_ignore.append(traj_idx)
+                if MFP_PLANNING_CHOICE == 'max_min_score_threshold':
+                  # NOTE: only threshold ego but not actor
+                  if ego_prob < planning_p_threshold:
+                    traj_idxs_to_ignore.append(traj_idx)
+                # Weight trajectories by "joint" probability
+                if MFP_PLANNING_CHOICE == 'highest_score_weighted':
+                  traj_weights.append(ego_prob * actor_prob)
+                # Move counter
+                traj_idx += 1
+                
+            # Visualize all the individual futures before scoring
+            plt.clf()
+            for i, (ego_prob, ego_traj) in enumerate(ego_futures):
+              ego_traj = ego_traj.astype('float64')  
+              plt.scatter(ego_traj[:,0],ego_traj[:,1],alpha=0.5,label='ego{}, p={:.4f}'.format(i,ego_prob))
+            for i, (actor_prob, actor_traj) in enumerate(actor_futures):
+              actor_traj = actor_traj.astype('float64')
+              plt.scatter(actor_traj[:,0],actor_traj[:,1],alpha=0.5,label='actor{}, p={:.4f}'.format(i,actor_prob))
+            plt_setup()
+            plt.gca().invert_xaxis() 
+            plt.legend()
+            plt.title('All futures (ego and actor)')
+            plt.savefig('{}_all_futures.png'.format(self._plan_counter))
+
+            # Feed the trajectories through the TF cost model
+            joint_traj_all = joint_traj_all[np.newaxis,:,:,:,:]
+            assert joint_traj_all.shape == (1,self.mfp_params.modes**2,2,30,2)
+            joint_traj_all_scores = self.sess.run(
+              self.mfp_cost_model_op,
+              feed_dict={self.mfp_cost_model_ph: joint_traj_all})
+            assert joint_traj_all_scores.shape == (1,self.mfp_params.modes**2)
+            joint_traj_all_scores = joint_traj_all_scores[0]
+
+            if MFP_PLANNING_CHOICE == 'highest_score_threshold':
+              # Before choosing the best joint traj, wipe the scores of the
+              # joint trajs where either ego or actor were low probability
+              print("Preprocessed scores max/min=",joint_traj_all_scores.max(),joint_traj_all_scores.min())
+              print("Setting %d/%d total joint traj with either ego/actor low prob" %
+                    (len(traj_idxs_to_ignore), self.mfp_params.modes**2))
+              joint_traj_all_scores[traj_idxs_to_ignore] = np.NINF # negative inf
+              print("Clipped scores max/min=",joint_traj_all_scores.max(),joint_traj_all_scores.min())
+              # Extract the ego traj from the highest scoring joint traj
+              best_plan_idx = np.argmax(joint_traj_all_scores)
+              best_joint_ego = joint_traj_all[0,best_plan_idx,0,:,:] # (1,trajs,agents,T,xy)
+              best_joint_actor = joint_traj_all[0,best_plan_idx,1,:,:] # (1,trajs,agents,T,xy)
+              best_plan = best_joint_ego # NOTE: ego is being used to plan
+            elif MFP_PLANNING_CHOICE == 'highest_score_weighted':
+              # Before choosing the best joint traj, weight the scores by p_ego * p_actor
+              print("Preprocessed scores max/min=",joint_traj_all_scores.max(),joint_traj_all_scores.min())
+              joint_traj_all_scores = joint_traj_all_scores * traj_weights
+              # Extract the ego traj from the highest scoring joint traj
+              print("Weighted scores max/min=",joint_traj_all_scores.max(),joint_traj_all_scores.min())
+              best_plan_idx = np.argmax(joint_traj_all_scores)
+              best_joint_ego = joint_traj_all[0,best_plan_idx,0,:,:] # (1,trajs,agents,T,xy)
+              best_joint_actor = joint_traj_all[0,best_plan_idx,1,:,:] # (1,trajs,agents,T,xy)
+              best_plan = best_joint_ego # NOTE: ego is being used to plan
+
+
+            ### Visualize all the joint trajectories after scoring
+            # This plots one ego per-FIGURE, with all actors collated
+
+            traj_idx = 0
+            for e_i, (ego_prob, ego_traj) in enumerate(ego_futures):
+              ego_traj = ego_traj.astype('float64')  
+
+              plt.clf()
+              fig, ax = plt.subplots(1,1)
+              axn = ax
+              ax_setup(axn)
+              axn.invert_xaxis()
+              axn.set_title('ego {}, all possible joints'.format(e_i))
+              axn.tick_params(axis='both', which='major', labelsize=8)
+              axn.set_aspect('equal')
+
+              axn.scatter(ego_traj[:,0],ego_traj[:,1],alpha=0.5,label='ego{}, p={:.2f}'.format(e_i,ego_prob))
+              for a_i, (actor_prob, actor_traj) in enumerate(actor_futures):
+                actor_traj = actor_traj.astype('float64')
+                # Plot the joint with its score and joint probability
+                axn.scatter(actor_traj[:,0],actor_traj[:,1],alpha=0.5,
+                  label='actor{}, p={:.4f}, p_j={:.4f}, s={:.4f}'.format(
+                    a_i,actor_prob,ego_prob*actor_prob,joint_traj_all_scores[traj_idx]))
+                traj_idx += 1
+
+              axn.legend()
+              fig.tight_layout()
+              plt.savefig('{}_ego{}_joints.png'.format(self._plan_counter,e_i))
+
+            if MFP_CONTROL and MFP_PLANNING_CHOICE != 'highest_prob':
+                # self.future_plan is used by the waypoint follower
+                self.future_plan = best_joint_ego.tolist()
+                # Can use this to inspect visualizations frame-by-frame
+                #input("pause")
+
+                # Visualize the "best" joint trajectory
+                color_purple = carla.Color(169,3,252,10) # purple for ego
+                color_yellow = carla.Color(252,223,3,10) # yellow for actor
+                self.draw_traj(best_joint_ego, color_purple, point_size=0.05, line_size=0.025,
+                  text="best_joint_ego, score={:.2f}".format(joint_traj_all_scores[best_plan_idx]),
+                  text_ts=0)
+                self.draw_traj(best_joint_actor, color_yellow, point_size=0.05, line_size=0.025,
+                  text="best_joint_actor, score={:.2f}".format(joint_traj_all_scores[best_plan_idx]),
+                  text_ts=0)
+
+            ### Visualize all the trajectories with a p > thresh
+            viz_p_threshold = planning_p_threshold
+            viz_counter_ego = 0
+            viz_counter_actor = 0
+            for (ego_prob, ego_traj), \
+                (actor_prob, actor_traj) in \
+                zip(ego_futures, actor_futures):
+
+              assert ego_traj.shape == (30,2)
+              assert actor_traj.shape == (30,2)
+              # note: needs to be f64 (not f32) or CARLA throws error
+              ego_traj = ego_traj.astype('float64')  
+              actor_traj = actor_traj.astype('float64')
+
+              if ego_prob > viz_p_threshold:
+                # Highest prob traj gets a different color
+                if ego_prob == max([p for p,t in ego_futures]):
+                    ego_color = carla.Color(44,99,163,10) # blue
+                    ego_text="ego_traj (max p), p={:.2f}".format(ego_prob)
+                    print("ego_p = %.2f, max = dark blue" % ego_prob)
+                    # NOTE: we can use the highest prob traj for control
+                    if MFP_CONTROL and MFP_PLANNING_CHOICE == 'highest_prob':
+                        self.future_plan = ego_traj.tolist()
+                else:
+                    print("ego_p = %.2f, non-max = light blue" % ego_prob)
+                    ego_color = carla.Color(36,214,214,10) # light blue
+                    ego_text="ego_traj, p={:.2f}".format(ego_prob)
+                print("mfp ego traj",type(ego_traj),ego_traj.shape,ego_traj.dtype)
+                self.draw_traj(ego_traj, ego_color,
+                  z_offset=.2*(viz_counter_ego+1),
+                  text=ego_text,
+                  text_ts=min(ego_traj.shape[0]-1, 1 + viz_counter_ego*1))
+                viz_counter_ego += 1
+
+
+              if actor_prob > viz_p_threshold:
+                if actor_prob == max([p for p,t in actor_futures]):
+                    print("actor_p = %.2f, max = red orange" % actor_prob)
+                    actor_color = carla.Color(255,60,20,10) # red/orange
+                else:
+                    print("actor_p = %.2f, non-max = dark red" % actor_prob)
+                    actor_color = carla.Color(207,0,0,10) # dark red
+                self.draw_traj(actor_traj, actor_color,
+                  z_offset=.2*(viz_counter_actor+1),
+                  text="actor_traj, p={:.2f}".format(actor_prob),
+                  text_ts=min(actor_traj.shape[0]-1, 1*(viz_counter_actor+1)))
+                viz_counter_actor += 1
+
+            #self.future_plan = traj.tolist()[0]
             self.frame_count = 0
             self.vec_ref = [self.future_plan[-1][0] - self.future_plan[0][0],self.future_plan[-1][1] - self.future_plan[0][1]]
 
@@ -613,20 +1024,14 @@ class ScenarioRunner(object):
 def main():
     runner = ScenarioRunner()
 
-    if RECORDING:
-        image_folder = 'Visualize/camera_folder'
-        images = [img for img in sorted(os.listdir(image_folder)) if img.endswith(".jpg")]
-        # Wipe previous images
-        for im in images:
-            os.remove(os.path.join(image_folder,im))
-
     try:
         runner.start()
     finally:
 
         def exit_handler():
             if RECORDING:
-                video_name = 'Visualize/{}.avi'.format(args.video_name)
+                image_folder = os.path.join(ROOT_DIR,'Experiment/Visualize/camera_folder_{}'.format(runner.VIS_DIR))
+                video_name = os.path.join(ROOT_DIR,'Experiment/Visualize/video_{}.avi'.format(runner.VIS_DIR))
                 images = [img for img in sorted(os.listdir(image_folder)) if img.endswith(".jpg")]
                 frame = cv2.imread(os.path.join(image_folder, images[0]))
                 height, width, layers = frame.shape
