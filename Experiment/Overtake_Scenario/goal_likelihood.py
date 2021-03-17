@@ -1,6 +1,6 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
-import numpy as np 
+import numpy as np
 
 
 class CostedGoalLikelihood:
@@ -30,7 +30,10 @@ class CostedGoalLikelihood:
         #distance_y = tf.tile(distance_y[None,None],(10,12,30))
         distance_y = tf.tile(distance_y[None,None],(self.batch_dim,self.traj_dim,30))
         criterion_2 = tf.sign(tf.nn.relu(distance_y - dis_y))
-        result = - criterion_1 * criterion_2 * 1000
+        pos_y_ego = trajectories[:,:,0,:,1] #10,12,30
+        pos_y_actor = trajectories[:,:,1,:,1] #10,12,30
+        criterion_3 = tf.sign(tf.nn.relu(pos_y_ego - pos_y_actor))
+        result = - criterion_1 * criterion_2 * criterion_3 * 1000
         self.cp_prob = tf.reduce_min(result,axis = -1) #sum
 
         return self.cp_prob + self.tp_prob
