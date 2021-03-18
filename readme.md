@@ -44,7 +44,7 @@ cd $CARLAROOT
 ./CarlaUE4.sh
 ```
 
-## Running experiments with PRECOG model
+## Running experiments with the CfO model
 
 ```bash
 cd Experiment
