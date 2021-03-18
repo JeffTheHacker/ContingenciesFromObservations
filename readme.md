@@ -123,7 +123,7 @@ optimizer.params.save_before_train=True
 
 ## Running the MFP baseline
 
-Install the [MFP baseline repo](https://github.com/cpacker/multiple-futures-prediction-carla), and set `MFPROOT` to point to your copyJ:
+Install the [MFP baseline repo](https://github.com/cpacker/multiple-futures-prediction-carla), and set `MFPROOT` to point to your copy:
 ```bash
 export MFPROOT=/your/copy/of/mfp
 ```
