@@ -46,7 +46,7 @@ cd $CARLAROOT
 
 ## Downloading the CARLA dataset
 
-The training data used to train the models in the paper can be downloaded [at this link](https://drive.google.com/file/d/14-o8XZtqJnRRCPqX3gz-LJuOgBORcbXT/view?usp=sharing).
+The dataset used to train the models in the paper can be downloaded [at this link](https://drive.google.com/file/d/14-o8XZtqJnRRCPqX3gz-LJuOgBORcbXT/view?usp=sharing).
 
 ## Generating the CARLA dataset
 
