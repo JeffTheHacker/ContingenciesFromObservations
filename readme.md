@@ -48,7 +48,7 @@ cd $CARLAROOT
 
 The training data used to train the models in the paper can be downloaded [at this link](https://drive.google.com/file/d/14-o8XZtqJnRRCPqX3gz-LJuOgBORcbXT/view?usp=sharing).
 
-## Collecting the CARLA dataset
+## Generating the CARLA dataset
 
 Alternatively, data can be generated in CARLA via the `scenario_runner.py` script:
 ```bash
