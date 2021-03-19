@@ -160,7 +160,6 @@ python scenario_runner_mfp.py \
 --scenario 2 \
 --location 0 \
 --mfp_control \
---mfp_planning_choice highest_score_weighted \
 --mfp_checkpoint CARLA_right_turn_scenario
 
 # overtake
@@ -172,7 +171,6 @@ python scenario_runner_mfp.py \
 --scenario 1 \
 --location 0 \
 --mfp_control \
---mfp_planning_choice highest_score_weighted \
 --mfp_checkpoint CARLA_overtake_scenario
 ```
 
