@@ -44,6 +44,14 @@ cd $CARLAROOT
 ./CarlaUE4.sh
 ```
 
+## CfO model 
+
+The CfO model/architecture code is contained in the [precog](precog) folder, and is based on the [PRECOG repository](https://github.com/nrhine1/precog) with several key differences:
+
+1. The architecture makes use of a CNN to process the LiDAR range map for contextual input instead of a feature map (see [precog/bijection/social_convrnn.py](precog/bijection/social_convrnn.py)). 
+2. The social features also include velocity and acceleration information of the agents (see [precog/bijection/social_convrnn.py](precog/bijection/social_convrnn.py)).
+3. The plotting script visualizes samples in a fixed set of coordinates with lidar overlayed on top (see [precog/plotting/plot.py](precog/plotting/plot.py)). 
+
 ## Running experiments with the CfO model
 
 ```bash
@@ -165,15 +173,6 @@ python scenario_runner_mfp.py \
 --mfp_planning_choice highest_score_weighted \
 --mfp_checkpoint CARLA_overtake_scenario
 ```
-
-## Precog 
-The model/architecture code is contained in the precog folder, and is based on the precog repository with several key differences. 
-
-(1) The architecture makes use of a CNN to process the lidar range map for contextual input instead of a feature map (see precog/bijection/social_convrnn.py). 
-
-(2) The social features also include velocity and acceleration information of the agents (see precog/bijection/social_convrnn.py).
-
-(3) The plotting script visualizes samples in a fixed set of coordinates with lidar overlayed on top (see precog/plotting/plot.py). 
 
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
