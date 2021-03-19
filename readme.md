@@ -75,8 +75,43 @@ The CfO model/architecture code is contained in the [precog](precog) folder, and
 2. The social features also include velocity and acceleration information of the agents (see [precog/bijection/social_convrnn.py](precog/bijection/social_convrnn.py)).
 3. The plotting script visualizes samples in a fixed set of coordinates with LiDAR overlayed on top (see [precog/plotting/plot.py](precog/plotting/plot.py)). 
 
-## Running experiments with the CfO model
+## Training the CfO model
 
+Organize the json files into the following structure:
+```md
+Custom_Dataset
+---train
+   ---feed_Episode_1_frame_90.json
+   ...
+---test
+   ...
+---val
+   ...
+```
+
+Modify relevant precog/conf files to insert correct absolute paths.
+```md
+Custom_Dataset.yaml
+esp_infer_config.yaml
+esp_train_config.yaml
+shared_gpu.yaml
+sgd_optimizer.yaml # set training hyperparameters
+```
+
+Then run:
+```bash
+export CUDA_VISIBLE_DEVICES=0;
+python $PRECOGROOT/precog/esp_train.py \
+dataset=Custom_Dataset \
+main.eager=False \
+bijection.params.A=2 \
+optimizer.params.plot_before_train=True \
+optimizer.params.save_before_train=True
+```
+
+## Evaluating a trained CfO model
+
+To evaluate a trained model in the CARLA simulator, run:
 ```bash
 cd Experiment
 python scenario_runner.py \
@@ -91,44 +126,10 @@ python scenario_runner.py \
 --location 0
 ```
 
+A checkpoint of the model used in the paper is provided in [Model/esp_train_results](Model/esp_train_results).
+
 The example script [test.sh](Experiment/test.sh) will run the experiments from the paper and generate a video for each one. For reference, when using a Titan RTX GPU and Intel i9-10900k CPU each episode takes approximately 10 minutes to run, and the entire script takes several hours to run to completion.
 
-## Training model
-
-Organize the json files into the following structure:
-
-```md
-Custom_Dataset
----train
-   ---feed_Episode_1_frame_90.json
-   ...
----test
-   ...
----val
-   ...
-```
-
-Modify relevant precog/conf files to insert correct absolute paths.
-
-```md
-Custom_Dataset.yaml
-esp_infer_config.yaml
-esp_train_config.yaml
-shared_gpu.yaml
-sgd_optimizer.yaml # set training hyperparameters
-```
-
-Then run
-
-```bash
-export CUDA_VISIBLE_DEVICES=0;
-python $PRECOGROOT/precog/esp_train.py \
-dataset=Custom_Dataset \
-main.eager=False \
-bijection.params.A=2 \
-optimizer.params.plot_before_train=True \
-optimizer.params.save_before_train=True
-```
 
 ## Running the MFP baseline
 
