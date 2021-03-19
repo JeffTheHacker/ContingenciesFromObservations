@@ -44,6 +44,29 @@ cd $CARLAROOT
 ./CarlaUE4.sh
 ```
 
+## Downloading the CARLA dataset
+
+The training data used to train the models in the paper can be downloaded [at this link](https://drive.google.com/file/d/14-o8XZtqJnRRCPqX3gz-LJuOgBORcbXT/view?usp=sharing).
+
+## Collecting the CARLA dataset
+
+Alternatively, data can be generated in CARLA via the `scenario_runner.py` script:
+```bash
+cd Experiment
+python scenario_runner.py \
+--enable-collecting \
+--scenario 0 \
+--location 0  
+```
+Episode data will be stored to Experiment/Data folder.
+
+Then run:
+```bash
+cd Experiment
+python Utils prepare_data.py
+```
+This will convert the episode data objects into json file per frame, and store them in Data/JSON_output folder.
+
 ## CfO model 
 
 The CfO model/architecture code is contained in the [precog](precog) folder, and is based on the [PRECOG repository](https://github.com/nrhine1/precog) with several key differences:
@@ -69,29 +92,6 @@ python scenario_runner.py \
 ```
 
 The example script [test.sh](Experiment/test.sh) will run the experiments from the paper and generate a video for each one. For reference, when using a Titan RTX GPU and Intel i9-10900k CPU each episode takes approximately 10 minutes to run, and the entire script takes several hours to run to completion.
-
-## Downloading the CARLA dataset
-
-The training data used to train the models in the paper can be downloaded [at this link](https://drive.google.com/file/d/14-o8XZtqJnRRCPqX3gz-LJuOgBORcbXT/view?usp=sharing).
-
-## Collecting the CARLA dataset
-
-Alternatively, data can be generated in CARLA via the `scenario_runner.py` script:
-```bash
-cd Experiment
-python scenario_runner.py \
---enable-collecting \
---scenario 0 \
---location 0  
-```
-Episode data will be stored to Experiment/Data folder.
-
-Then run:
-```bash
-cd Experiment
-python Utils prepare_data.py
-```
-This will convert the episode data objects into json file per frame, and store them in Data/JSON_output folder.
 
 ## Training model
 
