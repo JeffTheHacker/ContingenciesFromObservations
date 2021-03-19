@@ -10,7 +10,7 @@
 This repository requires CARLA 0.9.8. Please navigate to carla.org to download the correct packages, or do the following:
 ```bash
 # Downloads hosted binaries
-wget http://carla-assets-internal.s3.amazonaws.com/Releases/Linux/CARLA_0.9.8.tar.gz
+wget https://carla-releases.s3.eu-west-3.amazonaws.com/Linux/CARLA_0.9.8.tar.gz
 
 # Unpack CARLA 0.9.8 download
 tar -xvzf CARLA_0.9.8.tar.gz -C /path/to/your/desired/carla/install
