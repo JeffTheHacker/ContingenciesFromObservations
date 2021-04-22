@@ -177,3 +177,14 @@ python scenario_runner_mfp.py \
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
 
+### Citations
+To cite this work, use:
+```bibtex
+@inproceedings{rhinehart2021contingencies,
+    title={Contingencies from Observations: Tractable Contingency Planning with Learned Behavior Models},
+    author={Nicholas Rhinehart and Jeff He and Charles Packer and Matthew A. Wright and Rowan McAllister and Joseph E. Gonzalez and Sergey Levine},
+    booktitle={International Conference on Robotics and Automation (ICRA)},
+    organization={IEEE},
+    year={2021},
+}
+```
