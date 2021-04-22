@@ -174,10 +174,7 @@ python scenario_runner_mfp.py \
 --mfp_checkpoint CARLA_overtake_scenario
 ```
 
-## License
-[MIT](https://choosealicense.com/licenses/mit/)
-
-### Citations
+## Citations
 To cite this work, use:
 ```bibtex
 @inproceedings{rhinehart2021contingencies,
@@ -188,3 +185,6 @@ To cite this work, use:
     year={2021},
 }
 ```
+
+## License
+[MIT](https://choosealicense.com/licenses/mit/)
