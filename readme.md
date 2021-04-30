@@ -1,5 +1,9 @@
 # Contingencies From Observations
 
+[https://sites.google.com/view/contingency-planning/home](https://sites.google.com/view/contingency-planning/home)
+
+![decision_tree](https://user-images.githubusercontent.com/5475622/116763176-c8612200-a9d1-11eb-9d45-9a65b60825b2.png)
+
 ## Purposes
 
 1. Serve as the accompanying code for ICRA 2021 paper: Contingencies from Observations.
